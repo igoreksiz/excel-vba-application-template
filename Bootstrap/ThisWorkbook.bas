@@ -1,15 +1,10 @@
 Option Explicit
 
-' Requires Runtime
+' Requires module: Runtime
+' Requires module: ThisUserForm
 
 Private Const vMinimumWidth As Long = 110
 Private Const vMinimumHeight As Long = 30
-
-Private Const vDefaultWidth As Long = 800
-Private Const vDefaultHeight As Long = 400
-
-Private vOriginalLeft As Long
-Private vOriginalTop As Long
 
 Private Sub pInitialize()
     ' Check whether the application is running in background mode and not running tests.
@@ -22,29 +17,22 @@ Private Sub pInitialize()
     Else
         ' Load the excel application instance.
         With Application
-            ' Store the original dimensions.
-            vOriginalLeft = .Left
-            vOriginalTop = .Top
-
             ' Shrink the application window.
+            .WindowState = xlNormal
             .Width = vMinimumWidth
             .Height = vMinimumHeight
 
             ' Show the main user form.
             Call ThisUserForm.Show
 
-            ' Prevent the flickering of the application window, if it is to be closed.
-            If Not Runtime.IsDebugModeEnabled() Then
+            ' Determine if the application will be closed.
+            If Runtime.IsDebugModeEnabled() Then
+                ' Set the dimensions and position of the window.
+                .WindowState = xlMaximized
+            Else
+                ' Prevent the flickering of the application window before closing.
                 .Visible = False
             End If
-
-            ' Restore the original dimensions.
-            .Left = vOriginalLeft
-            .Top = vOriginalTop
-
-            ' Set the dimensions of the window.
-            .Width = vDefaultWidth
-            .Height = vDefaultHeight
         End With
     End If
 End Sub
@@ -65,11 +53,8 @@ Private Sub Workbook_Open()
     With Application
         ' Check whether the application is visible.
         If .Visible Then
-            ' Set the dimensions of the window.
-            .Width = vDefaultWidth
-            .Height = vDefaultHeight
-
-            ' Set the title and icon of the window.
+            ' Maximize the window and set its title and icon.
+            .WindowState = xlMaximized
             .ActiveWindow.Caption = vbNullString
             .Caption = Runtime.ProjectName()
             Call Runtime.SetActiveWindowIcon
@@ -98,6 +83,9 @@ Public Sub Initialize()
         Exit Sub
     End If
 
+    ' Save the main workbook file.
+    Call Me.Save
+
     ' Set the startup navigate path environment variable to user input.
     Runtime.WScriptShell().Environment("PROCESS")("APP_STARTUP_NAVIGATE_PATH") = InputBox("Enter the path to navigate to")
 
@@ -111,9 +99,13 @@ Public Sub Test()
         Exit Sub
     End If
 
+    ' Save the main workbook file.
+    Call Me.Save
+
     ' Set the startup navigate path environment variable to test.
     Runtime.WScriptShell().Environment("PROCESS")("APP_STARTUP_NAVIGATE_PATH") = Runtime.vTestNavigatePath
 
     ' Initialize the application.
     Call pInitialize
 End Sub
+

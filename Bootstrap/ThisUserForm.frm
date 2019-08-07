@@ -15,7 +15,7 @@ Attribute VB_PredeclaredId = True
 Attribute VB_Exposed = False
 Option Explicit
 
-' Requires Runtime
+' Requires module: Runtime
 
 Private Const vApplicationPadding As Long = 50
 Private Const vWebBrowserPadding As Long = 4

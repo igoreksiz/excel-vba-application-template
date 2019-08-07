@@ -4,6 +4,14 @@
 	<is-background-mode-enabled>False</is-background-mode-enabled>
 	<references>
 		<item
+			name="ADODB"
+			description="Microsoft ActiveX Data Objects 6.1 Library"
+		>
+			<guid>{B691E011-1797-432E-907A-4D8C69339129}</guid>
+			<major>6</major>
+			<minor>1</minor>
+		</item>
+		<item
 			name="Scripting"
 			description="Microsoft Scripting Runtime"
 		>

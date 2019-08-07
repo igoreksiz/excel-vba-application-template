@@ -2,85 +2,100 @@ Attribute VB_Name = "Controller"
 Option Explicit
 Option Private Module
 
-' Requires ThisUserForm
-' Requires Runtime
+' Requires reference: Scripting
+' Requires module: Runtime
+' Requires module: ThisUserForm
+' Requires module: ThisWorkbook
 
 Public Sub Navigate( _
     ByRef vPath As String, _
-    ByRef vParameters As Dictionary _
+    ByRef vParameters As Scripting.Dictionary _
 )
+    ' Declare local variables.
+    Dim vValues As New Scripting.Dictionary
+    Dim vName As Variant
+    Dim vOutput As String
+
+    ' Fill the output values.
+    With vValues
+        Call .Add("Date & Time", Runtime.DateTimeStamp(Now))
+        Call .Add("User @ Computer", Runtime.Username() & "@" & Runtime.ComputerName())
+        Call .Add("Navigate Path", Runtime.GenerateNavigatePath(vPath, vParameters))
+    End With
+
     ' If debug mode is enabled, print the current state to the immediate window.
     If Runtime.IsDebugModeEnabled() Then
         Debug.Print "===================== Output ====================="
-        Debug.Print "[Date & Time] " & Format(Now, "yyyy-mm-dd Hh:Nn:Ss")
-        Debug.Print "[User @ Computer] " & Runtime.Username() & "@" & Runtime.ComputerName()
-        Debug.Print "[Navigate Path] " & Runtime.GenerateNavigatePath(vPath, vParameters)
+        For Each vName In vValues.Keys()
+            Debug.Print Trim("[" & CStr(vName) & "] " & CStr(vValues(vName)))
+        Next
     End If
 
     ' Check whether the application is running in background mode.
     If Runtime.IsBackgroundModeEnabled() Then
-        ' Output the current timestamp to a file.
+        ' Output the current state to a file.
+        For Each vName In vValues.Keys()
+            vOutput = vOutput & Trim("[" & CStr(vName) & "] " & CStr(vValues(vName))) & vbLf
+        Next
         With Runtime.FileSystemObject()
-            With .OpenTextFile(.BuildPath(ThisWorkbook.Path, "Output.log"), ForAppending, True)
-                Call .WriteLine("[Date & Time] " & Format(Now, "yyyy-mm-dd Hh:Nn:Ss"))
-                Call .WriteLine("[User @ Computer] " & Runtime.Username() & "@" & Runtime.ComputerName())
-                Call .WriteLine("[Navigate Path] " & Runtime.GenerateNavigatePath(vPath, vParameters))
-                Call .WriteLine
-                Call .Close
-            End With
+            Call Runtime.AppendFile(.BuildPath(ThisWorkbook.Path, "Output.log"), vOutput, vbLf)
         End With
     Else
-        ' Display the path and parameters on the loaded html page.
-        Call ThisUserForm.SetInnerHtml("<h1>Navigate</h1>" _
-            & "<p><b>Date & Time</b>: <code>" & Format(Now, "yyyy-mm-dd Hh:Nn:Ss") & "</code></p>" _
-            & "<p><b>User @ Computer</b>: <code>" & Runtime.Username() & "@" & Runtime.ComputerName() & "</code></p>" _
-            & "<p><b>Navigate Path</b>: <code>" & Runtime.GenerateNavigatePath(vPath, vParameters) & "</code></p>")
+        ' Display the current state on the loaded html page.
+        For Each vName In vValues.Keys()
+            vOutput = vOutput & "<p><b>" & CStr(vName) & "</b>: <code>" & CStr(vValues(vName)) & "</code></p>"
+        Next
+        Call ThisUserForm.SetInnerHtml("<h1>Navigate</h1>" & vOutput)
     End If
 End Sub
 
 Public Sub HandleError( _
     ByRef vPath As String, _
-    ByRef vParameters As Dictionary, _
+    ByRef vParameters As Scripting.Dictionary, _
     ByRef vErrorMessage As String _
 )
+    ' Declare local variables.
+    Dim vValues As New Scripting.Dictionary
+    Dim vName As Variant
+    Dim vOutput As String
+
+    ' Fill the output values.
+    With vValues
+        Call .Add("Date & Time", Runtime.DateTimeStamp(Now))
+        Call .Add("User @ Computer", Runtime.Username() & "@" & Runtime.ComputerName())
+        Call .Add("Navigate Path", Runtime.GenerateNavigatePath(vPath, vParameters))
+        Call .Add("Error Number", CStr(Err.Number))
+        Call .Add("Error Source", Err.Source)
+        Call .Add("Error Description", Err.Description)
+    End With
+
     ' If debug mode is enabled, print the current state to the immediate window.
     If Runtime.IsDebugModeEnabled() Then
         Debug.Print "===================== Error ======================"
-        Debug.Print "[Date & Time] " & Format(Now, "yyyy-mm-dd Hh:Nn:Ss")
-        Debug.Print "[User @ Computer] " & Runtime.Username() & "@" & Runtime.ComputerName()
-        Debug.Print "[Navigate Path] " & Runtime.GenerateNavigatePath(vPath, vParameters)
-        Debug.Print "[Error Number] " & CStr(Err.Number)
-        Debug.Print "[Error Source] " & Err.Source
-        Debug.Print "[Error Description] " & Err.Description
-        Debug.Print "[Error Message] " & vErrorMessage
+        For Each vName In vValues.Keys()
+            Debug.Print Trim("[" & CStr(vName) & "] " & CStr(vValues(vName)))
+        Next
+        Debug.Print Trim("[Error Message] " & vErrorMessage)
     End If
 
     ' Check whether the application is running in background mode.
     If Runtime.IsBackgroundModeEnabled() Then
-        ' Output the current timestamp to a file.
+        ' Output the current state to a file.
+        For Each vName In vValues.Keys()
+            vOutput = vOutput & Trim("[" & CStr(vName) & "] " & CStr(vValues(vName))) & vbLf
+        Next
+        vOutput = vOutput & Trim("[Error Message] " & vErrorMessage) & vbLf
         With Runtime.FileSystemObject()
-            With .OpenTextFile(.BuildPath(ThisWorkbook.Path, "Error.log"), ForAppending, True)
-                Call .WriteLine("[Date & Time] " & Format(Now, "yyyy-mm-dd Hh:Nn:Ss"))
-                Call .WriteLine("[User @ Computer] " & Runtime.Username() & "@" & Runtime.ComputerName())
-                Call .WriteLine("[Navigate Path] " & Runtime.GenerateNavigatePath(vPath, vParameters))
-                Call .WriteLine("[Error Number] " & CStr(Err.Number))
-                Call .WriteLine("[Error Source] " & Err.Source)
-                Call .WriteLine("[Error Description] " & Err.Description)
-                Call .WriteLine("[Error Message] " & vErrorMessage)
-                Call .WriteLine
-                Call .Close
-            End With
+            Call Runtime.AppendFile(.BuildPath(ThisWorkbook.Path, "Error.log"), vOutput, vbLf)
         End With
     Else
-        ' Display the path and parameters on the loaded html page.
-        Call ThisUserForm.SetInnerHtml("<h1>Handle Error</h1>" _
-            & "<p><b>Date & Time</b>: <code>" & Format(Now, "yyyy-mm-dd Hh:Nn:Ss") & "</code></p>" _
-            & "<p><b>User @ Computer</b>: <code>" & Runtime.Username() & "@" & Runtime.ComputerName() & "</code></p>" _
-            & "<p><b>Navigate Path</b>: <code>" & Runtime.GenerateNavigatePath(vPath, vParameters) & "</code></p>" _
-            & "<p><b>Error Number</b>: <code>" & CStr(Err.Number) & "</code></p>" _
-            & "<p><b>Error Source</b>: <code>" & Err.Source & "</code></p>" _
-            & "<p><b>Error Description</b>: <code>" & Err.Description & "</code></p>")
+        ' Display the current state on the loaded html page.
+        For Each vName In vValues.Keys()
+            vOutput = vOutput & "<p><b>" & CStr(vName) & "</b>: <code>" & CStr(vValues(vName)) & "</code></p>"
+        Next
+        Call ThisUserForm.SetInnerHtml("<h1>Navigate</h1>" & vOutput)
 
+        ' Show dialog box with an error message.
         Call MsgBox(IIf(vErrorMessage = vbNullString, "An unknown unexpected error had occurred.", vErrorMessage), _
             vbCritical, "Error Message")
     End If
@@ -91,6 +106,13 @@ Public Sub ExecuteTestCase( _
     ByRef vCaseName As String _
 )
     Select Case vModuleName
+        Case "ModuleName"
+            Select Case vCaseName
+                Case "CaseName"
+                    ' Call ModuleName.Case_CaseName
+                Case Else
+                    Call Runtime.RaiseUndefinedTestCaseHandler
+            End Select
         Case Else
             Call Runtime.RaiseUndefinedTestModuleHandler
     End Select

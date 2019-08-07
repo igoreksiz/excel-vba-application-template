@@ -18,10 +18,11 @@ Call ExecuteShell(vTaskName, "git rebase base/master", False, True)
 ' Loop until the rebase is finished or aborted.
 Do While Left(ExecuteShell(vTaskName, "git status", True, False)("StandardOutput"), 18) = "rebase in progress"
 	' Notify the user of the instructions to follow.
-	Call ReportNotification(vTaskName, "follow the rebase instructions and when done enter the `exit` command, to continue.")
+	Call TaskNotification(vTaskName, "open a new command prompt and follow the rebase instructions.")
+	Call TaskNotification(vTaskName, "when the rebase is done, close the new command prompt and press ENTER.")
 
-	' Execute the nested shell.
-	Call ExecuteShell(vTaskName, "cmd", False, False)
+	' Wait for the enter key to be pressed.
+	Call WScript.StdIn.ReadLine()
 Loop
 
 ' Execute garbage collection upon the repository.

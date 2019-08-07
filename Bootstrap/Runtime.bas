@@ -2,7 +2,12 @@ Attribute VB_Name = "Runtime"
 Option Explicit
 Option Private Module
 
-' Requires Controller.
+' Requires reference: ADODB
+' Requires reference: Scripting
+' Requires reference: VBIDE
+' Requires module: Controller
+' Requires module: ThisUserForm
+' Requires module: ThisWorkbook
 
 Private Declare Function GetActiveWindow Lib "user32" () As Integer
 
@@ -59,15 +64,161 @@ Private vStoredErrorSource As String
 Private vStoredErrorDescription As String
 Private vStoredErrorMessage As String
 
-Private vFileSystemObject As FileSystemObject
+Private vFileSystemObject As Scripting.FileSystemObject
 Private vWScriptShell As Object
 
-Public Function FileSystemObject() As FileSystemObject
+Public Function FileSystemObject() As Scripting.FileSystemObject
     ' Initialize the file system object for use across the project, if needed.
     If vFileSystemObject Is Nothing Then
-        Set vFileSystemObject = New FileSystemObject
+        Set vFileSystemObject = New Scripting.FileSystemObject
     End If
     Set FileSystemObject = vFileSystemObject
+End Function
+
+Public Function ReadFile( _
+    ByRef vPath As String _
+) As String
+    ' Declare local variables.
+    Dim vStream As New ADODB.Stream
+
+    ' Setup error handling.
+    On Error GoTo HandleError:
+
+    ' Load the stream.
+    With vStream
+        ' Configure and open the stream for text data using the utf-8 charset.
+        .Type = adTypeText
+        .Charset = "UTF-8"
+        Call .Open
+
+        ' Load the contents of the file located at the specified path into the stream.
+        Call .LoadFromFile(vPath)
+
+        ' Read the opened file's text from the stream.
+        ReadFile = .ReadText()
+    End With
+
+Terminate:
+    ' Reset error handling.
+    On Error GoTo 0
+
+    ' Close the stream, if it has been opened.
+    With vStream
+        If .State <> adStateClosed Then
+            Call .Close
+        End If
+    End With
+
+    ' Re-raise the error if needed.
+    Call ReRaiseError
+
+    ' Exit the procedure.
+    Exit Function
+
+HandleError:
+    ' Store the error for further handling.
+    Call StoreError
+
+    ' Resume to procedure termination.
+    Resume Terminate:
+End Function
+
+Public Sub WriteFile( _
+    ByRef vPath As String, _
+    ByRef vText As String _
+)
+    ' Declare local variables.
+    Dim vFileStream As New ADODB.Stream
+
+    ' Setup error handling.
+    On Error GoTo HandleError:
+
+    ' Configure the file stream as a binary stream.
+    With vFileStream
+        .Type = adTypeBinary
+        Call .Open
+    End With
+
+    ' Initialize a temporary stream.
+    With New ADODB.Stream
+        ' Configure and open the temporary stream for text data using the utf-8 charset.
+        .Type = adTypeText
+        .Charset = "UTF-8"
+        Call .Open
+
+        ' Write the specified text into the temporary stream.
+        Call .WriteText(vText)
+
+        ' Reset the temporary stream to work with binary data and skip the created byte order mark.
+        .Position = 0
+        .Type = adTypeBinary
+        .Position = 3
+
+        ' Copy the contents of the temporary stream from its current position to the file stream.
+        Call .CopyTo(vFileStream)
+
+        ' Close the temporary stream.
+        Call .Close
+    End With
+
+    ' Save the contents of the file stream into a file located at the specified path.
+    Call vFileStream.SaveToFile(vPath, adSaveCreateOverWrite)
+
+Terminate:
+    ' Reset error handling.
+    On Error GoTo 0
+
+    ' Close the stream, if it has been opened.
+    With vFileStream
+        If .State <> adStateClosed Then
+            Call .Close
+        End If
+    End With
+
+    ' Re-raise the error if needed.
+    Call ReRaiseError
+
+    ' Exit the procedure.
+    Exit Sub
+
+HandleError:
+    ' Store the error for further handling.
+    Call StoreError
+
+    ' Resume to procedure termination.
+    Resume Terminate:
+End Sub
+
+Public Sub AppendFile( _
+    ByRef vPath As String, _
+    ByRef vText As String, _
+    Optional ByVal vDelimiter As String = vbNullString _
+)
+    ' Declare local variables.
+    Dim vOriginalText As String
+
+    ' Extract contents from the existing file.
+    If FileSystemObject().FileExists(vPath) Then
+        vOriginalText = ReadFile(vPath)
+        If vOriginalText <> vbNullString Then
+            vOriginalText = vOriginalText & vDelimiter
+        End If
+    End If
+
+    ' Concatenate and write the new data to the same file.
+    Call WriteFile(vPath, vOriginalText & vText)
+End Sub
+
+Public Function DateTimeStamp( _
+    ByVal vDate As Date, _
+    Optional ByVal vDateDelimiter As String = "-", _
+    Optional ByVal vTimeDelimiter As String = ":", _
+    Optional ByVal vPartDelimiter As String = " " _
+) As String
+    DateTimeStamp = Format(vDate, _
+        "yyyy" & vDateDelimiter & "mm" & vDateDelimiter & "dd" _
+        & vPartDelimiter _
+        & "Hh" & vTimeDelimiter & "Nn" & vTimeDelimiter & "Ss")
 End Function
 
 Public Function WScriptShell() As Object
@@ -76,6 +227,10 @@ Public Function WScriptShell() As Object
         Set vWScriptShell = CreateObject("WScript.Shell")
     End If
     Set WScriptShell = vWScriptShell
+End Function
+
+Public Function Is64bitOS() As Boolean
+    Is64bitOS = WScriptShell().Environment("PROCESS")("ProgramW6432") <> vbNullString
 End Function
 
 Public Function IsDebugModeEnabled() As Boolean
@@ -194,9 +349,9 @@ Public Sub StoreError()
     vIsErrorStored = True
 
     ' Store the current error parameters.
-    vStoredErrorNumber = VBA.Err.Number
-    vStoredErrorSource = VBA.Err.Source
-    vStoredErrorDescription = VBA.Err.Description
+    vStoredErrorNumber = Err.Number
+    vStoredErrorSource = Err.Source
+    vStoredErrorDescription = Err.Description
 End Sub
 
 Public Sub ReRaiseError()
@@ -212,13 +367,13 @@ End Sub
 
 Public Function ParseNavigatePath( _
     ByRef vNavigatePath As String _
-) As Dictionary
+) As Scripting.Dictionary
     ' Declare local variables.
     Dim vPath As String
     Dim vParametersPortionIndex As Long
     Dim vParameterEntry As Variant
     Dim vParsedParameterEntry() As String
-    Dim vParameters As New Dictionary
+    Dim vParameters As New Scripting.Dictionary
 
     vPath = vNavigatePath
     vParametersPortionIndex = InStr(vPath, "?")
@@ -234,7 +389,7 @@ Public Function ParseNavigatePath( _
         vPath = Left(vPath, vParametersPortionIndex - 1)
     End If
 
-    Set ParseNavigatePath = New Dictionary
+    Set ParseNavigatePath = New Scripting.Dictionary
     With ParseNavigatePath
         .Item("Path") = vPath
         Set .Item("Parameters") = vParameters
@@ -243,7 +398,7 @@ End Function
 
 Public Function GenerateNavigatePath( _
     ByRef vPath As String, _
-    ByRef vParameters As Dictionary _
+    ByRef vParameters As Scripting.Dictionary _
 ) As String
     ' Declare local variables.
     Dim vParameterKey As Variant
@@ -268,7 +423,7 @@ Public Sub Navigate( _
     ' Declare local variables.
     Dim vHasErrorOccurred As Boolean
     Dim vPath As String
-    Dim vParameters As Dictionary
+    Dim vParameters As Scripting.Dictionary
 
     ' Extract the query parameters if available.
     With ParseNavigatePath(vNavigatePath)
@@ -325,7 +480,7 @@ End Sub
 
 Public Sub ExecuteTests()
     ' Declare local variables.
-    Dim vComponent As VBComponent
+    Dim vComponent As VBIDE.VBComponent
     Dim vCodeLinePosition As Long
     Dim vCodeLine As String
     Dim vCaseName As String
@@ -435,9 +590,9 @@ Public Sub Assert( _
 End Sub
 
 Public Sub RaiseUndefinedTestModuleHandler()
-    Call RaiseError("Controller", "Cannot find an executor section for the test module.")
+    Call RaiseError("Runtime.RaiseUndefinedTestModuleHandler", "Cannot find an executor section for the test module.")
 End Sub
 
 Public Sub RaiseUndefinedTestCaseHandler()
-    Call RaiseError("Controller", "Cannot find an executor for the test case of the current test module.")
+    Call RaiseError("Runtime.RaiseUndefinedTestCaseHandler", "Cannot find an executor for the test case of the current test module.")
 End Sub

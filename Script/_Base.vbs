@@ -21,6 +21,8 @@ Const vbext_ct_MSForm = 3
 Const xlMaximized = -4137
 Const WshFinished = 1
 Const xlOpenXMLWorkbookMacroEnabled = 52
+Const xlExclusive = 3
+Const xlLocalSessionChanges = 2
 
 Sub TaskNotification( _
 	vTaskName, _
@@ -42,29 +44,17 @@ Function ExecuteShell( _
 	vIsContinueOnErrorEnabled _
 )
 	' Declare local variables.
-	Dim vStandardInputText
 	Dim vStandardOutputText
 	Dim vStandardErrorText
+	Dim vExitCode
 
 	' Initialize the result dictionary.
-	ExecuteShell = CreateObject("Scripting.Dictionary")
+	Set ExecuteShell = CreateObject("Scripting.Dictionary")
 
 	' Initialize the execution of the given command.
 	With vWScriptShell.Exec(vCommand)
-		' Wait for the subprocess to end.
+		' Give the subprocess time to execute.
 		Do While .Status <> WshFinished
-			' If setup to do so, forward any of the recieved standard input to the subprocess.
-			If _
-				Not vIsStandardInputOutputReturned _
-				And Not WScript.StdIn.AtEndOfStream _
-			Then
-				vStandardInputText = WScript.StdIn.ReadAll()
-				If vStandardInputText <> vbNullString Then
-					Call .StdIn.Write(vStandardInputText)
-				End If
-			End If
-
-			' Give the subprocess time to execute.
 			Call WScript.Sleep(100)
 		Loop
 
@@ -84,17 +74,21 @@ Function ExecuteShell( _
 		End If
 
 		' Retrieve the exit code.
-		Call ExecuteShell.Add("ExitCode", .ExitCode)
+		vExitCode = .ExitCode
+		Call ExecuteShell.Add("ExitCode", vExitCode)
 
 		' Process the exit code depending on the function's corresponding parameter.
-		If Not vIsContinueOnErrorEnabled Then
+		If _
+			Not vIsContinueOnErrorEnabled _
+			And (vExitCode <> 0) _
+		Then
 			' Output all of the gathered information about the subprocess's execution.
 			With WScript.StdErr
-				Call .WriteLine("The child process exited with the status code: " & ExecuteShell("ExitCode"))
+				Call .WriteLine("The child process exited with the status code: " & CStr(vExitCode))
 				Call .WriteLine("- command: " & vCommand)
 				If vIsStandardInputOutputReturned Then
-					Call .WriteLine("- standard output: " & ExecuteShell("StandardOutput"))
-					Call .WriteLine("- standard error: " & ExecuteShell("StandardError"))
+					Call .WriteLine("- standard output: " & vStandardOutputText)
+					Call .WriteLine("- standard error: " & vStandardErrorText)
 				End If
 			End With
 
@@ -199,6 +193,12 @@ Function LoadBuildConfiguration( _
 	Dim vItemNodes
 	Dim vItem
 
+	' Initialize the result.
+	Set LoadBuildConfiguration = CreateObject("Scripting.Dictionary")
+
+	' Add the date modified of the build configuration file.
+	Call LoadBuildConfiguration.Add("DateLastModified", vFileSystemObject.GetFile(vFilePath).DateLastModified)
+
 	' Initialize the msxml dom document object.
 	With CreateObject("MSXML2.DOMDocument.6.0")
 		' Configure to load files asynchronously.
@@ -206,9 +206,6 @@ Function LoadBuildConfiguration( _
 
 		' Load the build configuration xml file.
 		Call .load(vFilePath)
-
-		' Initialize the result.
-		Set LoadBuildConfiguration = CreateObject("Scripting.Dictionary")
 
 		' Load the root xml node.
 		With .selectSingleNode("build")
@@ -363,10 +360,11 @@ Sub CreateMainWorkbook( _
 			With .GetFile(vMainWorkbookFilePath)
 				' If the main workbook file is newer than any module file or this script, it doesn't need to be rebuilt.
 				If ( _
-					(GetFolderDateLastModified(vBootstrapFolder) < .DateLastModified) _
-					And (GetFolderDateLastModified(vScriptFolder) < .DateLastModified) _
-					And (GetFolderDateLastModified(vSourceFolder) < .DateLastModified) _
-					And (GetFolderDateLastModified(vTestFolder) < .DateLastModified) _
+					(vBuildConfiguration("DateLastModified") <= .DateLastModified) _
+					And (GetFolderDateLastModified(vBootstrapFolder) <= .DateLastModified) _
+					And (GetFolderDateLastModified(vScriptFolder) <= .DateLastModified) _
+					And (GetFolderDateLastModified(vSourceFolder) <= .DateLastModified) _
+					And (GetFolderDateLastModified(vTestFolder) <= .DateLastModified) _
 				) Then
 					Exit Sub
 				End If
@@ -489,6 +487,7 @@ Sub ExportMainWorkbookModules( _
 	Dim vModuleFile
 	Dim vExcludedModuleSet
 	Dim vItem
+	Dim vMainWorkbookFilePath
 	Dim vModuleFilePath
 	Dim vVBComponent
 	Dim vModuleFileDirectoryPath
@@ -518,15 +517,19 @@ Sub ExportMainWorkbookModules( _
 		Call .Add("ThisUserForm", Null)
 		Call .Add("ThisWorkbook", Null)
 		Call .Add("ThisWorksheet", Null)
-		For Each vItem In vBuildConfiguration("ExternalModules")
-			Call .Add(vItem("Name"), Null)
-		Next
+
+		If Not IsNull(vBuildConfiguration("ExternalModules")) Then
+			For Each vItem In vBuildConfiguration("ExternalModules")
+				Call .Add(vItem("Name"), Null)
+			Next
+		End If
 	End With
 
 	' Initialize an instance of the excel application.
 	With CreateObject("Excel.Application")
 		' Open the main workbook file.
-		With .Workbooks.Open(GetMainWorkbookFilePath(vProjectDirectoryPath), , True, , GetMainWorkbookFilePassword(vBuildConfiguration))
+		vMainWorkbookFilePath = GetMainWorkbookFilePath(vProjectDirectoryPath)
+		With .Workbooks.Open(vMainWorkbookFilePath, , , , GetMainWorkbookFilePassword(vBuildConfiguration))
 			' Load the vbproject of the main workbook.
 			With .VBProject
 				' Export all of the VBProject's components.
@@ -562,8 +565,9 @@ Sub ExportMainWorkbookModules( _
 				Next
 			End With
 
-			' Configure the workbook to ignore changes made.
-			.Saved = True
+			' Update the workbook's date modified.
+			.Parent.DisplayAlerts = False
+			Call .SaveAs(vMainWorkbookFilePath, , , , , , xlExclusive, xlLocalSessionChanges)
 		End With
 
 		' Close the excel application instance.
