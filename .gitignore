@@ -1,0 +1,17 @@
+# Temporary files.
+~$*
+
+# Build files.
+App.xlsm
+Execute.vbs
+
+# Ignore the bootstrap execute script file.
+!Script/Execute.vbs
+
+# Runtime and deploy configuration files.
+Config.xml
+Deploy.txt
+
+# Output and error log files.
+Error.log
+Output.log
